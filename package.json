@@ -1,0 +1,14 @@
+{
+  "name": "lamma-order-backend",
+  "version": "1.0.0",
+  "description": "Receives orders from the Lamma storefront and notifies the owner via WhatsApp (CallMeBot).",
+  "main": "server.js",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "dotenv": "^16.4.5"
+  }
+}
