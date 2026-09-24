@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Store Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0b0b0c;--surface:#161618;--line:#2a2a2d;--text:#f5f5f0;--muted:#9a9aa2;--accent:#ff3b5c;--good:#3ddc84;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;}
+  h1,h2{font-family:'Anton',sans-serif;font-weight:400;text-transform:uppercase;}
+  .wrap{max-width:780px;margin:0 auto;padding:28px 20px 80px;}
+  h1{font-size:28px;}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:24px;}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:18px;}
+  .card h2{font-size:16px;margin-bottom:12px;}
+  label{display:block;font-size:12px;color:var(--muted);font-weight:600;margin:9px 0 4px;}
+  input,select,textarea{width:100%;background:#0e0e10;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:9px 11px;font-size:14px;font-family:inherit;}
+  textarea{resize:vertical;}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .btn{background:var(--accent);color:#fff;border:none;border-radius:9px;padding:10px 16px;font-size:14px;font-weight:700;cursor:pointer;margin-top:12px;}
+  .btn:disabled{opacity:.5;}
+  .p-row{display:flex;gap:10px;align-items:center;background:#0e0e10;border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-top:8px;}
+  .p-row img{width:44px;height:44px;border-radius:7px;object-fit:cover;background:#1d1d20;flex:none;}
+  .p-info{flex:1;min-width:0;}
+  .p-info .n{font-size:14px;font-weight:600;}
+  .p-info .m{font-size:12px;color:var(--muted);}
+  .del{background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;}
+  .status{font-size:12px;margin-top:8px;min-height:15px;}
+  .status.ok{color:var(--good);} .status.err{color:var(--accent);}
+  .empty{color:var(--muted);font-size:13px;padding:8px 0;}
+  #login{max-width:320px;margin:80px auto;text-align:center;}
+  #login input{margin:14px 0;}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <h1>Admin Login</h1>
+  <input type="password" id="pwInput" placeholder="Admin password">
+  <button class="btn" style="width:100%" onclick="tryLogin()">Log in</button>
+  <div class="status err" id="loginStatus"></div>
+</div>
+
+<div id="panel" style="display:none">
+  <div class="wrap">
+    <h1>Store Admin</h1>
+    <div class="sub">Manage products, categories and checkout settings.</div>
+
+    <div class="card">
+      <h2>Ordering flow</h2>
+      <label>Checkout method</label>
+      <select id="flowSelect">
+        <option value="whatsapp">WhatsApp DM</option>
+        <option value="instagram">Instagram DM</option>
+        <option value="manual">Manual — show contact info</option>
+      </select>
+      <label>Contact number (country code, no + or spaces)</label>
+      <input type="text" id="contactNumber" placeholder="201001234567">
+      <label>Note shown to customers after they order</label>
+      <textarea id="postOrderNote" rows="3" placeholder="e.g. We'll confirm by phone before shipping."></textarea>
+      <button class="btn" onclick="saveAll()">Save settings</button>
+      <div class="status" id="settingsStatus"></div>
+    </div>
+
+    <div class="card">
+      <h2>Categories</h2>
+      <div class="row">
+        <input type="text" id="newCatName" placeholder="e.g. Fashion">
+        <button class="btn" style="margin-top:0" onclick="addCategory()">Add</button>
+      </div>
+      <div id="catList"></div>
+    </div>
+
+    <div class="card">
+      <h2>Add a product</h2>
+      <label>Product name</label>
+      <input type="text" id="pName" placeholder="Oversized Hoodie">
+      <div class="row">
+        <div><label>Category</label><select id="pCat"><option value="">Choose…</option></select></div>
+        <div><label>Price (EGP)</label><input type="number" id="pPrice" placeholder="450"></div>
+      </div>
+      <label>Photo URL (paste a link to an image, e.g. from Imgur or your phone's cloud photos)</label>
+      <input type="text" id="pPhoto" placeholder="https://...">
+      <button class="btn" onclick="addProduct()">Add product</button>
+      <div class="status" id="addStatus"></div>
+    </div>
+
+    <div class="card">
+      <h2>Current products</h2>
+      <div id="productList"><div class="empty">Loading…</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Same site as the backend, so plain relative paths work.
+const BACKEND_URL = '';
+
+let password = '';
+let state = { products: [], categories: [], settings: {} };
+
+function authHeader(){ return 'Basic ' + btoa(':' + password); }
+
+async function tryLogin(){
+  const pw = document.getElementById('pwInput').value;
+  const statusEl = document.getElementById('loginStatus');
+  try{
+    const res = await fetch(BACKEND_URL + '/api/admin/data', { headers: { Authorization: 'Basic ' + btoa(':' + pw) } });
+    if(!res.ok) throw new Error();
+    password = pw;
+    state = await res.json();
+    document.getElementById('login').style.display = 'none';
+    document.getElementById('panel').style.display = 'block';
+    render();
+  }catch(err){
+    statusEl.textContent = 'Wrong password or backend unreachable.';
+  }
+}
+
+function render(){
+  document.getElementById('flowSelect').value = state.settings.flow || 'whatsapp';
+  document.getElementById('contactNumber').value = state.settings.contact || '';
+  document.getElementById('postOrderNote').value = state.settings.note || '';
+
+  const catList = document.getElementById('catList');
+  const catSelect = document.getElementById('pCat');
+  catList.innerHTML = state.categories.length
+    ? state.categories.map((c,i) => `<div class="p-row"><div class="p-info"><div class="n">${c}</div></div><button class="del" onclick="removeCategory(${i})">&times;</button></div>`).join('')
+    : '<div class="empty">No categories yet.</div>';
+  catSelect.innerHTML = '<option value="">Choose…</option>' + state.categories.map(c => `<option value="${c}">${c}</option>`).join('');
+
+  const list = document.getElementById('productList');
+  list.innerHTML = state.products.length
+    ? state.products.map((p,i) => `
+        <div class="p-row">
+          ${p.photo ? `<img src="${p.photo}">` : ''}
+          <div class="p-info"><div class="n">${p.name}</div><div class="m">${p.category||'—'} · ${p.price} EGP</div></div>
+          <button class="del" onclick="removeProduct(${i})">&times;</button>
+        </div>`).join('')
+    : '<div class="empty">No products yet.</div>';
+}
+
+async function persist(statusEl){
+  try{
+    const res = await fetch(BACKEND_URL + '/api/admin/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: authHeader() },
+      body: JSON.stringify({ products: state.products, categories: state.categories, settings: state.settings })
+    });
+    if(!res.ok) throw new Error();
+    if(statusEl){ statusEl.className = 'status ok'; statusEl.textContent = 'Saved.'; }
+  }catch(err){
+    if(statusEl){ statusEl.className = 'status err'; statusEl.textContent = 'Could not save — try again.'; }
+  }
+}
+
+function saveAll(){
+  state.settings = {
+    flow: document.getElementById('flowSelect').value,
+    contact: document.getElementById('contactNumber').value.trim(),
+    note: document.getElementById('postOrderNote').value.trim(),
+  };
+  persist(document.getElementById('settingsStatus'));
+}
+
+function addCategory(){
+  const input = document.getElementById('newCatName');
+  const name = input.value.trim();
+  if(!name) return;
+  state.categories.push(name);
+  input.value = '';
+  render();
+  persist();
+}
+function removeCategory(i){ state.categories.splice(i,1); render(); persist(); }
+
+function addProduct(){
+  const name = document.getElementById('pName').value.trim();
+  const category = document.getElementById('pCat').value;
+  const price = Number(document.getElementById('pPrice').value);
+  const photo = document.getElementById('pPhoto').value.trim();
+  const status = document.getElementById('addStatus');
+  if(!name || !price){ status.className='status err'; status.textContent='Add a name and price.'; return; }
+  state.products.push({ name, category, price, photo });
+  document.getElementById('pName').value='';
+  document.getElementById('pPrice').value='';
+  document.getElementById('pPhoto').value='';
+  render();
+  persist(status);
+}
+function removeProduct(i){ state.products.splice(i,1); render(); persist(); }
+</script>
+</body>
+</html>
